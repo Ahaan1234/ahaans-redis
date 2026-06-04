@@ -30,3 +30,11 @@
 *.exe
 *.out
 *.app
+
+# Compiled binaries
+server
+client
+
+# editor/OS noise
+.DS_Store
+.vscode/
