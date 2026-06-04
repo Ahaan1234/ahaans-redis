@@ -5,44 +5,35 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
 
-struct addrinfo {
-    int ai_flags; // AI_PASSIVE, AI_CANONNAME, etc.
-    int ai_family; // AF_INET, AF_INET6, AF_UNSPEC
-    int ai_socktype; // SOCK_STREAM, SOCK_DGRAM
-    int ai_protocol; // use 0 for "any"
-    size_t ai_addrlen; // size of ai_addr in bytes
-    struct sockaddr *ai_addr; // struct sockaddr_in or _in6
-    char *ai_canonname; // full canonical hostname
-    struct addrinfo *ai_next; // linked list, next node
-};
+// helper function — must be defined before use
+static void die(const char *msg) {
+    perror(msg);
+    exit(1);
+}
 
-struct sockaddr {
-    unsigned short sa_family; // address family, AF_xxx
-    char sa_data[14]; // 14 bytes of protocol address
-};
+int main() {
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0) {
+        die("socket()");
+    }
 
-struct sockaddr_in {
-    short int sin_family; // Address family, AF_INET
-    unsigned short int sin_port; // Port number
-    struct in_addr sin_addr; // Internet address
-    unsigned char sin_zero[8]; // Same size as struct sockaddr
-};
+    struct sockaddr_in addr = {};
+    addr.sin_family = AF_INET;
+    addr.sin_port = ntohs(1234);
+    addr.sin_addr.s_addr = ntohl(INADDR_LOOPBACK);  // 127.0.0.1
+    int rv = connect(fd, (const struct sockaddr *)&addr, sizeof(addr));
+    if (rv) {
+        die("connect");
+    }
 
-struct in_addr {
-    uint32_t s_addr; // that's a 32-bit int (4 bytes)
-};
+    char msg[] = "hello";
+    write(fd, msg, strlen(msg));
 
-struct sockaddr_storage {
-    sa_family_t ss_family; // address family
-    // all this is padding, implementation specific, ignore it:
-    char __ss_pad1[_SS_PAD1SIZE];
-    int64_t __ss_align;
-    char __ss_pad2[_SS_PAD2SIZE];
-};
-
-int fd = socket(AF_INET, SOCK_STREAM, 0); 
-/* AF_INET is for IPv4. Use AF_INET6 for IPv6 or dual-stack sockets. 
-SOCK_STREAM is for TCP. Use SOCK_DGRAM for UDP.*/
-
-int val = 1;
-setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &val, sizeof(val));s
+    char rbuf[64] = {};
+    ssize_t n = read(fd, rbuf, sizeof(rbuf) - 1);
+    if (n < 0) {
+        die("read");
+    }
+    printf("server says: %s\n", rbuf);
+    close(fd);
+}
