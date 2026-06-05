@@ -64,7 +64,15 @@ static int32_t query(int fd, const char *text) {
     int32_t err = read_full(fd, rbuf, 4);
     if(err) {
         msg(errno == 0 ? "EOF" : "read() error");
+        return err;
     }
+    memcpy(&len, rbuf, 4);
+    if (len > k_max_msg) {
+        msg("too long");
+        return -1;
+    }
+    // read body
+    
 }
 
 int main() {
