@@ -28,45 +28,6 @@ static void do_something(int connfd) {
     write(connfd, wbuf, strlen(wbuf));
 }
 
-int main() {
-    int fd = socket(AF_INET, SOCK_STREAM, 0);
-    struct sockaddr_in addr = {};
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(1234);        // port
-    addr.sin_addr.s_addr = htonl(0);    // wildcard IP 0.0.0.0
-    int rv = bind(fd, (const struct sockaddr *)&addr, sizeof(addr));
-    if (rv) { die("bind()"); }
-
-    // listen
-    rv = listen(fd, SOMAXCONN);
-    if (rv) { die("listen()"); }
-    while (true) {
-        // accept
-        struct sockaddr_in client_addr = {};
-        socklen_t addrlen = sizeof(client_addr);
-        int connfd = accept(fd, (struct sockaddr *)&client_addr, &addrlen);
-        if (connfd < 0) {
-            continue;   // error
-        }
-        // only serve one client at once
-        while (true) {
-            int32_t err = one_request(connfd);
-            /*
-            * one_request function will read 1 request and write 1 reponse. 
-            * the problem is, how many bytes to raed? that is the function of
-            * an *application protocol*. A ttypical protocol has 2 levels
-            * of structures: 
-            *   1. high level byte structure to split the byte stream into messages
-            *   2. the structure within a message (aka deserialization)
-            */
-            if (err) {
-                break;
-            }
-        }
-        close(connfd);
-    }
-}
-
 /*Essentially, when communicating messages with many bytes, 
 * you need to keep calling. this is because read and write 
 * are not guaranteed to process all 4 bytes at once. The 
@@ -109,7 +70,6 @@ static int32_t write_all(int fd, const char *buf, size_t n) {
 }
 
 const size_t k_max_msg = 4096;
-int errno;
 
 static int32_t one_request(int connfd) {
     // 4 bytes header
@@ -117,7 +77,7 @@ static int32_t one_request(int connfd) {
     errno = 0;
     int32_t err = read_full(connfd, rbuf, 4);
     if (err) {
-        msg(errno == 0 ? "EOF" : "read() error") // (condition ? value_if_true : value_if_false)
+        msg(errno == 0 ? "EOF" : "read() error"); // (condition ? value_if_true : value_if_false)
     }
     uint32_t len = 0;
     memcpy(&len, rbuf, 4); // short for memory copy; function used to rapidly copy a specific number of bytes from a source memory location to a destination memory location
@@ -132,7 +92,7 @@ static int32_t one_request(int connfd) {
         return err;
     }
     // do stuff
-    printf("client says: %s\n", len, &rbuf[4]);
+    printf("client says: %.*s\n", len, &rbuf[4]);
     // reply using same protocol
     const char reply[] = "world";
     char wbuf[4+sizeof(reply)];
@@ -140,4 +100,43 @@ static int32_t one_request(int connfd) {
     memcpy(wbuf, &len, 4);
     memcpy(&wbuf[4], reply, len);
     return write_all(connfd, wbuf, len + 4);
+}
+
+int main() {
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in addr = {};
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(1234);        // port
+    addr.sin_addr.s_addr = htonl(0);    // wildcard IP 0.0.0.0
+    int rv = bind(fd, (const struct sockaddr *)&addr, sizeof(addr));
+    if (rv) { die("bind()"); }
+
+    // listen
+    rv = listen(fd, SOMAXCONN);
+    if (rv) { die("listen()"); }
+    while (true) {
+        // accept
+        struct sockaddr_in client_addr = {};
+        socklen_t addrlen = sizeof(client_addr);
+        int connfd = accept(fd, (struct sockaddr *)&client_addr, &addrlen);
+        if (connfd < 0) {
+            continue;   // error
+        }
+        // only serve one client at once
+        while (true) {
+            int32_t err = one_request(connfd);
+            /*
+            * one_request function will read 1 request and write 1 reponse. 
+            * the problem is, how many bytes to raed? that is the function of
+            * an *application protocol*. A ttypical protocol has 2 levels
+            * of structures: 
+            *   1. high level byte structure to split the byte stream into messages
+            *   2. the structure within a message (aka deserialization)
+            */
+            if (err) {
+                break;
+            }
+        }
+        close(connfd);
+    }
 }
