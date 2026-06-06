@@ -16,18 +16,6 @@ static void msg(const char *msg) {
     fprintf(stderr, "%s\n", msg);
 }
 
-static void do_something(int connfd) {
-    char rbuf[64] = {};//  creates a fixed-size memory array used to temporarily hold incoming data
-    ssize_t n = read(connfd, rbuf, sizeof(rbuf)-1);
-    if (n<0) {
-        msg("read() error");
-        return;
-    }
-    printf("client says: %s\n", rbuf);
-    char wbuf[] = "world";
-    write(connfd, wbuf, strlen(wbuf));
-}
-
 /*Essentially, when communicating messages with many bytes, 
 * you need to keep calling. this is because read and write 
 * are not guaranteed to process all 4 bytes at once. The 
@@ -48,7 +36,6 @@ static int32_t read_full(int fd, char *buf, size_t n) {
         if (rv <= 0) {
             return -1;
         }
-
         assert((size_t)rv <= n);
         n -= (size_t)rv; // size_t—the standard unsigned integer type to represent sizes and array indices in bytes
         buf += rv;
