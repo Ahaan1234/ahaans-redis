@@ -78,24 +78,29 @@ static int32_t one_request(int connfd) {
     int32_t err = read_full(connfd, rbuf, 4);
     if (err) {
         msg(errno == 0 ? "EOF" : "read() error"); // (condition ? value_if_true : value_if_false)
+        return err;
     }
+
     uint32_t len = 0;
     memcpy(&len, rbuf, 4); // short for memory copy; function used to rapidly copy a specific number of bytes from a source memory location to a destination memory location
     if (len > k_max_msg) {
         msg("too long");
         return -1;
     }
-    // NOW we read the body... wtfff
+
+    // request body
     err = read_full(connfd, &rbuf[4], len);
     if (err) {
         msg("read() error");
         return err;
     }
+
     // do stuff
     printf("client says: %.*s\n", len, &rbuf[4]);
+
     // reply using same protocol
     const char reply[] = "world";
-    char wbuf[4+sizeof(reply)];
+    char wbuf[4 + sizeof(reply)];
     len = (uint32_t)strlen(reply);
     memcpy(wbuf, &len, 4);
     memcpy(&wbuf[4], reply, len);
@@ -139,4 +144,5 @@ int main() {
         }
         close(connfd);
     }
+    return 0;
 }
