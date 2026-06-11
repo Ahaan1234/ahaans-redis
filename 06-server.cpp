@@ -140,6 +140,45 @@ static Conn *handle_accept(int fd) {
     return conn;
 }
 
+static void handle_read(Conn *conn) {
+    uint8_t buf[64 * 1024];
+    ssize_t rv = read(conn->fd, buf, sizeof(buf));
+    if(rv<=0) {
+        conn->want_close=true;
+        return;
+    }
+    buf_append(conn->incoming, buf, (size_t)rv);
+    try_one_request(conn);
+}
+
+static bool try_one_request(Conn *conn) {
+    if (conn->incoming.size() < 4) {
+        return false;   // want read
+    }
+    uint32_t len = 0;
+    memcpy(&len, conn->incoming.data(), 4);
+    if(len > k_max_msg) {
+        conn->want_close=true;
+        return false;
+    }
+    if(4+len > conn->incoming.size()) {
+        return false;
+    }
+
+    buf_append(conn->outgoing, (const uint8_t *)&len, 4);
+    buf_append(conn->outgoing, request, len);
+    buf_consume(conn->incoming, 4 + len);
+    return true;
+}
+
+static void buf_append(std::vector<uint8_t> &buf, const uint8_t *data, size_t len){
+    buf.insert(buf.end(), data, data+len);
+}
+
+static void buf_consume(std::vector<uint8_t> &buf, size_t n) {
+    buf.erase(buf.begin(), buf.begin()+n);
+}
+
 int main() {
     int fd = socket(AF_INET, SOCK_STREAM, 0);
     struct sockaddr_in addr = {};
