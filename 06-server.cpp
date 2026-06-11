@@ -33,7 +33,7 @@ static void die(const char *msg) {
     exit(1);
 }
 
-static void msg(const char *msg) {
+/*static void msg(const char *msg) {
     fprintf(stderr, "%s\n", msg);
 }
 
@@ -61,10 +61,10 @@ static int32_t write_all(int fd, const char *buf, size_t n) {
         buf += rv;
     }
     return 0;
-}
+}*/
 
 const size_t k_max_msg = 4096;
-
+/*
 static int32_t one_request(int connfd) {
     // 4 bytes header
     char rbuf[4 + k_max_msg];
@@ -99,7 +99,7 @@ static int32_t one_request(int connfd) {
     memcpy(wbuf, &len, 4);
     memcpy(&wbuf[4], reply, len);
     return write_all(connfd, wbuf, len + 4);
-}
+}*/
 
 /*
     * With an event loop, an application task can span multiple loop iterations, 
@@ -140,15 +140,12 @@ static Conn *handle_accept(int fd) {
     return conn;
 }
 
-static void handle_read(Conn *conn) {
-    uint8_t buf[64 * 1024];
-    ssize_t rv = read(conn->fd, buf, sizeof(buf));
-    if(rv<=0) {
-        conn->want_close=true;
-        return;
-    }
-    buf_append(conn->incoming, buf, (size_t)rv);
-    try_one_request(conn);
+static void buf_append(std::vector<uint8_t> &buf, const uint8_t *data, size_t len){
+    buf.insert(buf.end(), data, data+len);
+}
+
+static void buf_consume(std::vector<uint8_t> &buf, size_t n) {
+    buf.erase(buf.begin(), buf.begin()+n);
 }
 
 static bool try_one_request(Conn *conn) {
@@ -165,18 +162,42 @@ static bool try_one_request(Conn *conn) {
         return false;
     }
 
+    const uint8_t *request = &conn->incoming[4];
+
     buf_append(conn->outgoing, (const uint8_t *)&len, 4);
     buf_append(conn->outgoing, request, len);
     buf_consume(conn->incoming, 4 + len);
     return true;
 }
 
-static void buf_append(std::vector<uint8_t> &buf, const uint8_t *data, size_t len){
-    buf.insert(buf.end(), data, data+len);
+
+static void handle_read(Conn *conn) {
+    uint8_t buf[64 * 1024];
+    ssize_t rv = read(conn->fd, buf, sizeof(buf));
+    if(rv<=0) {
+        conn->want_close=true;
+        return;
+    }
+    buf_append(conn->incoming, buf, (size_t)rv);
+    try_one_request(conn);
+    if(conn->outgoing.size() > 0) {
+        conn->want_read = false;
+        conn->want_write = true;
+    }
 }
 
-static void buf_consume(std::vector<uint8_t> &buf, size_t n) {
-    buf.erase(buf.begin(), buf.begin()+n);
+static void handle_write(Conn *conn) {
+    assert(conn->outgoing.size() > 0);
+    ssize_t rv = write(conn->fd, conn->outgoing.data(), conn->outgoing.size());
+    if(rv<0) {
+        conn->want_close = true;
+        return;
+    }
+    buf_consume(conn->outgoing, (size_t)rv);
+    if (conn->outgoing.size() == 0) {
+        conn->want_read = true;
+        conn->want_write = false;
+    }
 }
 
 int main() {
@@ -188,6 +209,8 @@ int main() {
     int rv = bind(fd, (const struct sockaddr *)&addr, sizeof(addr));
     if (rv) { die("bind()"); }
 
+    rv = listen(fd, SOMAXCONN);
+    if (rv) { die("listen()"); }
     std::vector<Conn *> fd2conn;
     std::vector<struct pollfd> poll_args;
     while (true) {
